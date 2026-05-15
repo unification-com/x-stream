@@ -44,8 +44,9 @@ func (msg MsgCreateStream) Route() string { return RouterKey }
 // Type should return the action
 func (msg MsgCreateStream) Type() string { return CreateStreamAction }
 
-// ValidateBasic ToDo - deprecated and now handled by msg_server. Remove and remove from unit tests
-// ValidateBasic runs stateless checks on the message
+// ValidateBasic runs stateless checks on the message. Called by the SDK ante
+// chain before msg-server execution; performs input sanity that doesn't need
+// access to chain state. Msg-server adds stateful checks on top.
 func (msg MsgCreateStream) ValidateBasic() error {
 	_, accErr := sdk.AccAddressFromBech32(msg.Sender)
 	if accErr != nil {
@@ -56,6 +57,9 @@ func (msg MsgCreateStream) ValidateBasic() error {
 		return accErr
 	}
 
+	if err := msg.Deposit.Validate(); err != nil {
+		return errorsmod.Wrap(ErrInvalidData, err.Error())
+	}
 	if msg.Deposit.IsNil() || msg.Deposit.IsNegative() || msg.Deposit.IsZero() {
 		return errorsmod.Wrap(ErrInvalidData, "deposit must be > zero")
 	}
@@ -97,8 +101,9 @@ func (msg MsgClaimStream) Route() string { return RouterKey }
 // Type should return the action
 func (msg MsgClaimStream) Type() string { return ClaimStreamAction }
 
-// ValidateBasic ToDo - deprecated and now handled by msg_server. Remove and remove from unit tests
-// ValidateBasic runs stateless checks on the message
+// ValidateBasic runs stateless checks on the message. Called by the SDK ante
+// chain before msg-server execution; performs input sanity that doesn't need
+// access to chain state. Msg-server adds stateful checks on top.
 func (msg MsgClaimStream) ValidateBasic() error {
 	_, accErr := sdk.AccAddressFromBech32(msg.Receiver)
 	if accErr != nil {
@@ -137,8 +142,9 @@ func (msg MsgTopUpDeposit) Route() string { return RouterKey }
 // Type should return the action
 func (msg MsgTopUpDeposit) Type() string { return TopUpDepositAction }
 
-// ValidateBasic ToDo - deprecated and now handled by msg_server. Remove and remove from unit tests
-// ValidateBasic runs stateless checks on the message
+// ValidateBasic runs stateless checks on the message. Called by the SDK ante
+// chain before msg-server execution; performs input sanity that doesn't need
+// access to chain state. Msg-server adds stateful checks on top.
 func (msg MsgTopUpDeposit) ValidateBasic() error {
 	_, accErr := sdk.AccAddressFromBech32(msg.Sender)
 	if accErr != nil {
@@ -150,6 +156,9 @@ func (msg MsgTopUpDeposit) ValidateBasic() error {
 		return accErr
 	}
 
+	if err := msg.Deposit.Validate(); err != nil {
+		return errorsmod.Wrap(ErrInvalidData, err.Error())
+	}
 	if msg.Deposit.IsNil() || msg.Deposit.IsNegative() || msg.Deposit.IsZero() {
 		return errorsmod.Wrap(ErrInvalidData, "deposit must be > zero")
 	}
@@ -179,8 +188,9 @@ func (msg MsgUpdateFlowRate) Route() string { return RouterKey }
 // Type should return the action
 func (msg MsgUpdateFlowRate) Type() string { return UpdateFlowRateAction }
 
-// ValidateBasic ToDo - deprecated and now handled by msg_server. Remove and remove from unit tests
-// ValidateBasic runs stateless checks on the message
+// ValidateBasic runs stateless checks on the message. Called by the SDK ante
+// chain before msg-server execution; performs input sanity that doesn't need
+// access to chain state. Msg-server adds stateful checks on top.
 func (msg MsgUpdateFlowRate) ValidateBasic() error {
 	_, accErr := sdk.AccAddressFromBech32(msg.Sender)
 	if accErr != nil {
@@ -207,11 +217,11 @@ func (msg MsgUpdateFlowRate) ValidateBasic() error {
 
 // NewMsgCancelStream is a constructor function for MsgCancelStream
 func NewMsgCancelStream(
-	reciever,
+	receiver,
 	sender sdk.AccAddress,
 	denom string) *MsgCancelStream {
 	return &MsgCancelStream{
-		Receiver: reciever.String(),
+		Receiver: receiver.String(),
 		Sender:   sender.String(),
 		Denom:    denom,
 	}
@@ -223,8 +233,9 @@ func (msg MsgCancelStream) Route() string { return RouterKey }
 // Type should return the action
 func (msg MsgCancelStream) Type() string { return CancelStreamAction }
 
-// ValidateBasic ToDo - deprecated and now handled by msg_server. Remove and remove from unit tests
-// ValidateBasic runs stateless checks on the message
+// ValidateBasic runs stateless checks on the message. Called by the SDK ante
+// chain before msg-server execution; performs input sanity that doesn't need
+// access to chain state. Msg-server adds stateful checks on top.
 func (msg MsgCancelStream) ValidateBasic() error {
 	_, accErr := sdk.AccAddressFromBech32(msg.Sender)
 	if accErr != nil {

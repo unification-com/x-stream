@@ -7,6 +7,21 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
+// MaxStreamDurationSeconds caps the lifetime of any individual stream at
+// 10 years (315,360,000 s). Caps two distinct risks:
+//
+//   - time.Duration is int64 nanoseconds (max ~292 years). A naïve duration
+//     near 9.2e9 seconds would overflow the time arithmetic in
+//     keeper.AddDeposit / keeper.SetNewFlowRate, producing a malformed
+//     DepositZeroTime.
+//   - Indefinite-duration streams are an unusual user pattern; an explicit
+//     bound forces senders to choose a reasonable horizon and re-topup if
+//     they want to extend.
+//
+// Any MsgCreateStream / MsgTopUpDeposit / MsgUpdateFlowRate whose resulting
+// duration exceeds this is rejected at msg-server time.
+const MaxStreamDurationSeconds int64 = 10 * 365 * 24 * 60 * 60 // 10 years
+
 func PeriodEnumFromString(period string) StreamPeriod {
 	switch period {
 	case "Second", "second", "sec":
@@ -103,15 +118,29 @@ func CalculateAmountToClaim(
 		amountToClaim = deposit
 		remainingDepositValue = sdk.NewCoin(deposit.Denom, mathmod.NewInt(0))
 	} else {
-		// calculate based on flow rate and remaining deposit
+		// Compute claim amount in arbitrary-precision math.Int rather than
+		// int64 — at extreme inputs (flow_rate × elapsed near int64 max)
+		// the multiplication would otherwise wrap silently.
 		timeSinceLast := nowTime.Sub(lastOutflowTime)
 		secondsSinceLast := int64(timeSinceLast.Seconds())
-		numCoins := secondsSinceLast * flowRate
-		amountToClaim = sdk.NewCoin(deposit.Denom, mathmod.NewIntFromUint64(uint64(numCoins)))
+		if secondsSinceLast < 0 {
+			// clock skew or invalid lastOutflowTime — treat as no time elapsed
+			secondsSinceLast = 0
+		}
+		// flowRate is validated > 0 by msg_server before this is reached, but
+		// guard anyway to keep this pure-fn defensible.
+		var flowInt mathmod.Int
+		if flowRate < 0 {
+			flowInt = mathmod.NewInt(0)
+		} else {
+			flowInt = mathmod.NewInt(flowRate)
+		}
+		numCoinsInt := mathmod.NewInt(secondsSinceLast).Mul(flowInt)
+		amountToClaim = sdk.NewCoin(deposit.Denom, numCoinsInt)
 		if deposit.Amount.GT(amountToClaim.Amount) {
 			remainingDepositValue = deposit.Sub(amountToClaim)
 		} else {
-			// just in case
+			// computed accrual exceeds deposit — cap at deposit
 			amountToClaim = deposit
 			remainingDepositValue = sdk.NewCoin(deposit.Denom, mathmod.NewInt(0))
 		}

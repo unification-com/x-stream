@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"cosmossdk.io/log/v2"
-	storetypes "github.com/cosmos/cosmos-sdk/store/v2/types"
 	"github.com/cosmos/cosmos-sdk/codec"
+	storetypes "github.com/cosmos/cosmos-sdk/store/v2/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 
@@ -37,6 +37,12 @@ func NewKeeper(
 	// ensure module account is set in SupplyKeeper
 	if addr := accKeeper.GetModuleAddress(types.ModuleName); addr == nil {
 		panic(fmt.Sprintf("%s module account has not been set", types.ModuleName))
+	}
+
+	// Validate authority at construction so a misconfigured app fails at
+	// boot rather than later when a MsgUpdateParams is first submitted.
+	if _, err := sdk.AccAddressFromBech32(authority); err != nil {
+		panic(fmt.Sprintf("invalid authority address %q: %s", authority, err))
 	}
 
 	return Keeper{

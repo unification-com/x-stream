@@ -13,11 +13,32 @@ func (s *KeeperTestSuite) TestParams() {
 		expectErr bool
 	}{
 		{
-			name: "set full valid params",
+			name: "set valid params (5% within cap)",
 			input: types.Params{
-				ValidatorFee: mathmod.LegacyNewDecWithPrec(24, 2),
+				ValidatorFee: mathmod.LegacyNewDecWithPrec(5, 2),
 			},
 			expectErr: false,
+		},
+		{
+			name: "set valid params exactly at cap (10%)",
+			input: types.Params{
+				ValidatorFee: types.MaxValidatorFee,
+			},
+			expectErr: false,
+		},
+		{
+			name: "> MaxValidatorFee (11%) rejected",
+			input: types.Params{
+				ValidatorFee: mathmod.LegacyNewDecWithPrec(11, 2),
+			},
+			expectErr: true,
+		},
+		{
+			name: "100% rejected",
+			input: types.Params{
+				ValidatorFee: mathmod.LegacyOneDec(),
+			},
+			expectErr: true,
 		},
 		{
 			name: "set invalid params > 100%",

@@ -20,12 +20,28 @@ const (
 	MemStoreKey = "mem_stream"
 )
 
+// MaxStreamsPerSender caps the number of concurrent open streams a single
+// sender address can hold. Defends against state-bloat / storage DoS where
+// an attacker creates many small streams to grow the KV store. 1000 is
+// generous for ordinary use (a typical sender will have a handful at most)
+// while still bounding the worst case at O(N_addresses × 1000) entries.
+const MaxStreamsPerSender = 1000
+
 var (
 	// ParamsKey is the prefix for the params store
 	ParamsKey = []byte{0x01}
 
-	// StreamKeyPrefix prefix for the Stream store
+	// StreamKeyPrefix prefix for the primary Stream store. Full key shape is
+	//   0x11 | len(receiver) | receiver | len(sender) | sender | len(denom) | denom
 	StreamKeyPrefix = []byte{0x11}
+
+	// StreamBySenderKeyPrefix is a secondary index keyed by sender, so that
+	// AllStreamsForSender doesn't have to scan the entire stream store.
+	// Full key shape is
+	//   0x12 | len(sender) | sender | len(receiver) | receiver | len(denom) | denom
+	// The value is empty — the index is purely a presence-marker. The full
+	// Stream record lives under StreamKeyPrefix.
+	StreamBySenderKeyPrefix = []byte{0x12}
 )
 
 func KeyPrefix(p string) []byte {
@@ -82,4 +98,47 @@ func lengthPrefixedDenom(denom string) []byte {
 		panic("denom length must be <= 255")
 	}
 	return append([]byte{byte(len(b))}, b...)
+}
+
+// --- Sender secondary index ---
+
+// GetStreamBySenderKey constructs the full secondary-index key for a single
+// stream identified by (sender, receiver, denom). The key alone is the marker;
+// the value stored against it is empty.
+func GetStreamBySenderKey(senderAddr sdk.AccAddress, receiverAddr sdk.AccAddress, denom string) []byte {
+	out := append([]byte{}, StreamBySenderKeyPrefix...)
+	out = append(out, address.MustLengthPrefix(senderAddr)...)
+	out = append(out, address.MustLengthPrefix(receiverAddr)...)
+	out = append(out, lengthPrefixedDenom(denom)...)
+	return out
+}
+
+// GetStreamsBySenderPrefixKey is the prefix that selects every secondary-index
+// entry for a given sender.
+//   0x12 | len(sender) | sender
+func GetStreamsBySenderPrefixKey(senderAddr sdk.AccAddress) []byte {
+	return append(StreamBySenderKeyPrefix, address.MustLengthPrefix(senderAddr)...)
+}
+
+// ReceiverAndDenomFromSenderIndexRemainder parses (receiver, denom) out of a
+// secondary-index key that has had its 0x12 | len(sender) | sender prefix
+// stripped — i.e. just len(receiver) | receiver | len(denom) | denom.
+//
+// Returns nil/"" on malformed input rather than panicking, so iterators that
+// encounter unexpected bytes can skip the entry instead of halting.
+func ReceiverAndDenomFromSenderIndexRemainder(key []byte) (sdk.AccAddress, string) {
+	if len(key) == 0 {
+		return nil, ""
+	}
+	recvLen := int(key[0])
+	if len(key) < 1+recvLen+1 {
+		return nil, ""
+	}
+	receiver := sdk.AccAddress(key[1 : 1+recvLen])
+	denomLen := int(key[1+recvLen])
+	if len(key) < 1+recvLen+1+denomLen {
+		return receiver, ""
+	}
+	denom := string(key[1+recvLen+1 : 1+recvLen+1+denomLen])
+	return receiver, denom
 }

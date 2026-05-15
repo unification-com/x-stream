@@ -45,6 +45,11 @@ func TestMsgCreateStream_ValidateBasic(t *testing.T) {
 		{sdk.NewCoin(sdk.DefaultBondDenom, mathmod.NewIntFromUint64(10000)), 100, r, sdk.AccAddress{}, false},
 		{sdk.NewCoin(sdk.DefaultBondDenom, mathmod.NewIntFromUint64(100)), 100, r, s, false},
 		{sdk.NewCoin(sdk.DefaultBondDenom, mathmod.NewIntFromUint64(10000)), 100, r, r, false},
+		// Malformed denoms rejected at ValidateBasic
+		{sdk.Coin{Denom: "1invalid", Amount: mathmod.NewIntFromUint64(10000)}, 100, r, s, false}, // starts with digit
+		{sdk.Coin{Denom: "x", Amount: mathmod.NewIntFromUint64(10000)}, 100, r, s, false},        // too short
+		{sdk.Coin{Denom: "", Amount: mathmod.NewIntFromUint64(10000)}, 100, r, s, false},         // empty
+		{sdk.Coin{Denom: "has space", Amount: mathmod.NewIntFromUint64(10000)}, 100, r, s, false}, // space not allowed
 	}
 
 	for i, tc := range tests {
@@ -124,6 +129,10 @@ func TestMsgTopUpDeposit_ValidateBasic(t *testing.T) {
 		{sdk.NewCoin(sdk.DefaultBondDenom, mathmod.NewIntFromUint64(100)), sdk.AccAddress(ed25519.GenPrivKey().PubKey().Address()), sdk.AccAddress{}, false},
 		{sdk.NewCoin(sdk.DefaultBondDenom, mathmod.NewIntFromUint64(100)), sdk.AccAddress{}, sdk.AccAddress(ed25519.GenPrivKey().PubKey().Address()), false},
 		{sdk.NewCoin(sdk.DefaultBondDenom, mathmod.NewIntFromUint64(0)), sdk.AccAddress(ed25519.GenPrivKey().PubKey().Address()), sdk.AccAddress(ed25519.GenPrivKey().PubKey().Address()), false},
+		// Malformed denoms rejected at ValidateBasic
+		{sdk.Coin{Denom: "1invalid", Amount: mathmod.NewIntFromUint64(100)}, sdk.AccAddress(ed25519.GenPrivKey().PubKey().Address()), sdk.AccAddress(ed25519.GenPrivKey().PubKey().Address()), false},
+		{sdk.Coin{Denom: "", Amount: mathmod.NewIntFromUint64(100)}, sdk.AccAddress(ed25519.GenPrivKey().PubKey().Address()), sdk.AccAddress(ed25519.GenPrivKey().PubKey().Address()), false},
+		{sdk.Coin{Denom: "has space", Amount: mathmod.NewIntFromUint64(100)}, sdk.AccAddress(ed25519.GenPrivKey().PubKey().Address()), sdk.AccAddress(ed25519.GenPrivKey().PubKey().Address()), false},
 	}
 
 	for i, tc := range tests {
@@ -250,15 +259,37 @@ func TestMsgUpdateParams_ValidateBasic(t *testing.T) {
 			"validator fee cannot be negative:",
 		},
 		{
-			"validator fee > 100%",
+			"validator fee > MaxValidatorFee (10%)",
 			types.MsgUpdateParams{
 				Authority: authtypes.NewModuleAddress(govtypes.ModuleName).String(),
 				Params: types.Params{
-					ValidatorFee: mathmod.LegacyNewDecWithPrec(101, 2),
+					ValidatorFee: mathmod.LegacyNewDecWithPrec(11, 2),
 				},
 			},
 			true,
-			"validator fee cannot be greater than 100% (1.00). Sent",
+			"validator fee cannot exceed",
+		},
+		{
+			"validator fee = 100% rejected (above MaxValidatorFee cap)",
+			types.MsgUpdateParams{
+				Authority: authtypes.NewModuleAddress(govtypes.ModuleName).String(),
+				Params: types.Params{
+					ValidatorFee: mathmod.LegacyOneDec(),
+				},
+			},
+			true,
+			"validator fee cannot exceed",
+		},
+		{
+			"validator fee exactly at cap accepted",
+			types.MsgUpdateParams{
+				Authority: authtypes.NewModuleAddress(govtypes.ModuleName).String(),
+				Params: types.Params{
+					ValidatorFee: types.MaxValidatorFee,
+				},
+			},
+			false,
+			"",
 		},
 		{
 			"nil validator fee",

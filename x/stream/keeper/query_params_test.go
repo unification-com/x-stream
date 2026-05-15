@@ -9,7 +9,8 @@ import (
 
 func (s *KeeperTestSuite) TestParamsQuery() {
 	defaultFee := simapp.SimTestDefaultStreamValFee
-	newFee := mathmod.LegacyNewDecWithPrec(24, 2)
+	// Use a fee within MaxValidatorFee (10%).
+	newFee := mathmod.LegacyNewDecWithPrec(5, 2) // 5%
 
 	req1 := &types.QueryParamsRequest{}
 	expRes1 := &types.QueryParamsResponse{Params: types.DefaultParams()}
@@ -27,7 +28,9 @@ func (s *KeeperTestSuite) TestParamsQuery() {
 	s.Require().NoError(err2)
 	s.Require().Equal(expRes2, res2)
 
-	_ = s.app.StreamKeeper.SetParams(s.ctx, types.NewParams(newFee))
+	err := s.app.StreamKeeper.SetParams(s.ctx, types.NewParams(newFee))
+	s.Require().NoError(err)
+
 	req3 := &types.QueryParamsRequest{}
 	expRes3 := &types.QueryParamsResponse{Params: types.Params{ValidatorFee: newFee}}
 
@@ -35,4 +38,10 @@ func (s *KeeperTestSuite) TestParamsQuery() {
 
 	s.Require().NoError(err3)
 	s.Require().Equal(expRes3, res3)
+
+	// above-cap fee rejected by SetParams
+	aboveCap := mathmod.LegacyNewDecWithPrec(11, 2) // 11%
+	err = s.app.StreamKeeper.SetParams(s.ctx, types.NewParams(aboveCap))
+	s.Require().Error(err)
+	s.Require().Contains(err.Error(), "validator fee cannot exceed")
 }

@@ -10,23 +10,37 @@ import (
 )
 
 func TestParamsValidate(t *testing.T) {
-	params1 := types.Params{ValidatorFee: mathmod.LegacyNewDecWithPrec(1, 2)}
-	err := params1.Validate()
-	require.NoError(t, err)
+	// Default (1%) — accepted
+	require.NoError(t, types.Params{ValidatorFee: mathmod.LegacyNewDecWithPrec(1, 2)}.Validate())
 
-	params2 := types.Params{ValidatorFee: mathmod.LegacyNewDecWithPrec(-1, 2)}
-	err = params2.Validate()
+	// Zero — accepted (no validator fee)
+	require.NoError(t, types.Params{ValidatorFee: mathmod.LegacyZeroDec()}.Validate())
+
+	// Negative — rejected
+	err := types.Params{ValidatorFee: mathmod.LegacyNewDecWithPrec(-1, 2)}.Validate()
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "validator fee cannot be negative:")
 
-	params3 := types.Params{ValidatorFee: mathmod.LegacyNewDecWithPrec(101, 2)}
-	err = params3.Validate()
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "validator fee cannot be greater than 100% (1.00). Sent")
+	// Exactly at MaxValidatorFee (10%) — accepted (boundary case)
+	require.NoError(t, types.Params{ValidatorFee: types.MaxValidatorFee}.Validate())
 
-	params4 := types.Params{ValidatorFee: mathmod.LegacyDec{}}
-	err = params4.Validate()
+	// Just above MaxValidatorFee — rejected
+	err = types.Params{ValidatorFee: mathmod.LegacyNewDecWithPrec(11, 2)}.Validate()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "validator fee cannot exceed")
+
+	// 100% — rejected
+	err = types.Params{ValidatorFee: mathmod.LegacyOneDec()}.Validate()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "validator fee cannot exceed")
+
+	// >100% — rejected
+	err = types.Params{ValidatorFee: mathmod.LegacyNewDecWithPrec(101, 2)}.Validate()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "validator fee cannot exceed")
+
+	// Nil — rejected
+	err = types.Params{ValidatorFee: mathmod.LegacyDec{}}.Validate()
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "validator fee cannot be nil")
-
 }

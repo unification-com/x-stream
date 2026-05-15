@@ -19,11 +19,20 @@ func (k Keeper) GetTotalDeposits(ctx sdk.Context) sdk.Coins {
 	return totalDeposits
 }
 
-// SetStream Sets the stream
+// SetStream persists the stream and maintains the sender secondary index.
+// Marshalling errors are surfaced rather than panicked — for a valid Stream
+// proto this never fails, but the safe API avoids a chain-halting panic if a
+// future schema regression appears.
 func (k Keeper) SetStream(ctx sdk.Context, receiverAddr, senderAddr sdk.AccAddress, denom string, stream types.Stream) error {
+	bz, err := k.cdc.Marshal(&stream)
+	if err != nil {
+		return err
+	}
 	store := ctx.KVStore(k.storeKey)
-	store.Set(types.GetStreamKey(receiverAddr, senderAddr, denom), k.cdc.MustMarshal(&stream))
-
+	store.Set(types.GetStreamKey(receiverAddr, senderAddr, denom), bz)
+	// Sender index — set is idempotent so callers don't need to know whether
+	// they're inserting or updating.
+	store.Set(types.GetStreamBySenderKey(senderAddr, receiverAddr, denom), []byte{})
 	return nil
 }
 
@@ -33,7 +42,11 @@ func (k Keeper) IsStream(ctx sdk.Context, receiverAddr, senderAddr sdk.AccAddres
 	return store.Has(types.GetStreamKey(receiverAddr, senderAddr, denom))
 }
 
-// GetStream Gets the stream data
+// GetStream returns the stream and a found-flag. If the stored bytes for a
+// matched key are corrupt, GetStream logs the failure and treats the entry as
+// absent rather than panicking. A panic here would halt the chain via ABCI
+// when triggered from a query, which is a strictly worse failure mode than
+// returning "not found" for the single bad row.
 func (k Keeper) GetStream(ctx sdk.Context, receiverAddr, senderAddr sdk.AccAddress, denom string) (types.Stream, bool) {
 	store := ctx.KVStore(k.storeKey)
 	bz := store.Get(types.GetStreamKey(receiverAddr, senderAddr, denom))
@@ -42,7 +55,14 @@ func (k Keeper) GetStream(ctx sdk.Context, receiverAddr, senderAddr sdk.AccAddre
 		return types.Stream{}, false
 	}
 	var stream types.Stream
-	k.cdc.MustUnmarshal(bz, &stream)
+	if err := k.cdc.Unmarshal(bz, &stream); err != nil {
+		k.Logger(ctx).Error("stream entry corrupt — treating as absent",
+			"receiver", receiverAddr.String(),
+			"sender", senderAddr.String(),
+			"denom", denom,
+			"err", err)
+		return types.Stream{}, false
+	}
 	return stream, true
 }
 
@@ -52,6 +72,21 @@ func (k Keeper) DeleteStream(ctx sdk.Context, receiverAddr, senderAddr sdk.AccAd
 	}
 	store := ctx.KVStore(k.storeKey)
 	store.Delete(types.GetStreamKey(receiverAddr, senderAddr, denom))
+	store.Delete(types.GetStreamBySenderKey(senderAddr, receiverAddr, denom))
+}
+
+// CountStreamsForSender returns the number of open streams sent by senderAddr.
+// Uses the StreamBySenderKeyPrefix secondary index so the cost is proportional
+// to the sender's own stream count, not the total number of streams on-chain.
+func (k Keeper) CountStreamsForSender(ctx sdk.Context, senderAddr sdk.AccAddress) int {
+	store := ctx.KVStore(k.storeKey)
+	iter := storetypes.KVStorePrefixIterator(store, types.GetStreamsBySenderPrefixKey(senderAddr))
+	defer iter.Close()
+	count := 0
+	for ; iter.Valid(); iter.Next() {
+		count++
+	}
+	return count
 }
 
 // IterateAllStreams iterates over all the Streams of all accounts
@@ -67,10 +102,15 @@ func (k Keeper) IterateAllStreams(ctx sdk.Context, cb func(sdk.AccAddress, sdk.A
 		receiverAddr, senderAddr, denom := types.AddressesFromStreamKey(iterator.Key())
 
 		var stream types.Stream
-		err := k.cdc.Unmarshal(iterator.Value(), &stream)
-
-		if err != nil {
-			panic(err)
+		if err := k.cdc.Unmarshal(iterator.Value(), &stream); err != nil {
+			// Skip corrupt rows rather than panic — a panic here halts genesis
+			// export and other read paths. Log and continue.
+			k.Logger(ctx).Error("skipping corrupt stream entry during iteration",
+				"receiver", receiverAddr.String(),
+				"sender", senderAddr.String(),
+				"denom", denom,
+				"err", err)
+			continue
 		}
 
 		if cb(receiverAddr, senderAddr, denom, stream) {
@@ -117,7 +157,15 @@ func (k Keeper) ClaimFromStream(ctx sdk.Context, receiverAddr, senderAddr sdk.Ac
 		}
 	}
 
-	// 5. send modified amount from module account to receiver
+	// 5. send modified amount from module account to receiver.
+	// Defence-in-depth: re-check that the receiver hasn't become a blocked
+	// module account between stream creation and this claim. CreateStream
+	// already rejects blocked recipients at creation time, but the host
+	// chain's blocked list can change at runtime.
+	if k.bankKeeper.BlockedAddr(receiverAddr) {
+		return sdk.Coin{}, sdk.Coin{}, sdk.Coin{}, sdk.Coin{}, errorsmod.Wrapf(types.ErrInvalidData,
+			"receiver %s is blocked from receiving funds", receiverAddr.String())
+	}
 	if receiverAmount.Amount.GT(mathmod.NewIntFromUint64(0)) {
 		err := k.bankKeeper.SendCoinsFromModuleToAccount(ctx, types.ModuleName, receiverAddr, sdk.NewCoins(receiverAmount))
 

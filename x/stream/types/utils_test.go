@@ -213,6 +213,59 @@ func TestCalculateAmountToClaim(t *testing.T) {
 	}
 }
 
+// TestCalculateAmountToClaim_OverflowDefence exercises extreme-input math
+// paths. The internal arithmetic uses math.Int, so flow_rate × elapsed cannot
+// overflow regardless of input scale; the downstream deposit cap then bounds
+// the actual claim. Includes a negative-seconds case to verify defensive
+// clock-skew handling.
+func TestCalculateAmountToClaim_OverflowDefence(t *testing.T) {
+	now := time.Now()
+	tests := []struct {
+		name              string
+		secsSinceLast     int64
+		flowRate          int64
+		deposit           sdk.Coin
+		expectedClaim     sdk.Coin
+		expectedRemaining sdk.Coin
+	}{
+		{
+			name:              "extreme flow × seconds overflows int64 but math.Int handles it",
+			secsSinceLast:     2,
+			flowRate:          1<<62 + 1, // any 2-mult of this overflows int64 max
+			deposit:           sdk.NewCoin("testdenom", mathmod.NewIntFromUint64(1000)),
+			expectedClaim:     sdk.NewCoin("testdenom", mathmod.NewIntFromUint64(1000)), // capped at deposit
+			expectedRemaining: sdk.NewCoin("testdenom", mathmod.NewInt(0)),
+		},
+		{
+			name:              "max int64 flowRate × 1 second — boundary",
+			secsSinceLast:     1,
+			flowRate:          1<<63 - 1, // math.MaxInt64
+			deposit:           sdk.NewCoin("testdenom", mathmod.NewIntFromUint64(1000)),
+			expectedClaim:     sdk.NewCoin("testdenom", mathmod.NewIntFromUint64(1000)), // capped at deposit
+			expectedRemaining: sdk.NewCoin("testdenom", mathmod.NewInt(0)),
+		},
+		{
+			name:              "negative seconds (clock skew) treated as zero",
+			secsSinceLast:     -100, // lastOutflow in the future — defensive
+			flowRate:          1,
+			deposit:           sdk.NewCoin("testdenom", mathmod.NewIntFromUint64(1000)),
+			expectedClaim:     sdk.NewCoin("testdenom", mathmod.NewInt(0)),
+			expectedRemaining: sdk.NewCoin("testdenom", mathmod.NewIntFromUint64(1000)),
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(tt *testing.T) {
+			lastOutflow := time.Unix(now.Unix()-tc.secsSinceLast, 0)
+			// depositZeroTime far in the future so we exercise the accrual branch, not the expired branch
+			depositZeroTime := now.Add(24 * time.Hour)
+			gotClaim, gotRemaining := types.CalculateAmountToClaim(now, depositZeroTime, lastOutflow, tc.deposit, tc.flowRate)
+			require.Equal(t, tc.expectedClaim.Amount.String(), gotClaim.Amount.String(), "claim amount")
+			require.Equal(t, tc.expectedRemaining.Amount.String(), gotRemaining.Amount.String(), "remaining amount")
+			require.Equal(t, "testdenom", gotClaim.Denom)
+		})
+	}
+}
+
 func TestCalculateValidatorFee(t *testing.T) {
 
 	zeroPerc := mathmod.LegacyNewDecWithPrec(0, 2)

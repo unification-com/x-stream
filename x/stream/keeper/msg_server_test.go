@@ -19,15 +19,26 @@ func (s *KeeperTestSuite) TestMsgServerUpdateParams() {
 		expErrMsg string
 	}{
 		{
-			name: "set valid params",
+			name: "set valid params (5% within cap)",
 			request: &types.MsgUpdateParams{
 				Authority: s.app.StreamKeeper.GetAuthority(),
 				Params: types.Params{
-					ValidatorFee: mathmod.LegacyNewDecWithPrec(24, 2),
+					ValidatorFee: mathmod.LegacyNewDecWithPrec(5, 2),
 				},
 			},
 			expectErr: false,
 			expErrMsg: "",
+		},
+		{
+			name: "11% rejected by MaxValidatorFee cap",
+			request: &types.MsgUpdateParams{
+				Authority: s.app.StreamKeeper.GetAuthority(),
+				Params: types.Params{
+					ValidatorFee: mathmod.LegacyNewDecWithPrec(11, 2),
+				},
+			},
+			expectErr: true,
+			expErrMsg: "validator fee cannot exceed",
 		},
 		{
 			name: "set invalid authority",
@@ -46,7 +57,7 @@ func (s *KeeperTestSuite) TestMsgServerUpdateParams() {
 				},
 			},
 			expectErr: true,
-			expErrMsg: "validator fee cannot be greater than 100",
+			expErrMsg: "validator fee cannot exceed",
 		},
 		{
 			name: "set invalid params negative value",
@@ -255,6 +266,37 @@ func (s *KeeperTestSuite) TestMsgServerCreateStream() {
 			expResult: nil,
 			expectErr: true,
 			expErrMsg: "calculated duration too short. Must be > 1 minute",
+		},
+		{
+			// MaxStreamDurationSeconds = 10 years = 315_360_000s.
+			// Deposit/FlowRate that yields a longer duration is rejected.
+			name: "invalid - duration > MaxStreamDurationSeconds",
+			request: &types.MsgCreateStream{
+				Sender:   s.addrs[2].String(),
+				Receiver: s.addrs[3].String(),
+				Deposit:  sdk.NewInt64Coin(sdk.DefaultBondDenom, 400_000_000), // 400M nund
+				FlowRate: 1,                                                    // → 400M seconds ≈ 12.7 years
+			},
+			expResult: nil,
+			expectErr: true,
+			expErrMsg: "exceeds max",
+		},
+		{
+			name: "valid - duration exactly at MaxStreamDurationSeconds",
+			request: &types.MsgCreateStream{
+				Sender:   s.addrs[2].String(),
+				Receiver: s.addrs[3].String(),
+				Deposit:  sdk.NewInt64Coin(sdk.DefaultBondDenom, 315_360_000), // 10 years exactly
+				FlowRate: 1,
+			},
+			expResult: &types.MsgCreateStreamResponse{
+				Sender:   s.addrs[2].String(),
+				Receiver: s.addrs[3].String(),
+				Deposit:  sdk.NewInt64Coin(sdk.DefaultBondDenom, 315_360_000),
+				FlowRate: 1,
+			},
+			expectErr: false,
+			expErrMsg: "",
 		},
 	}
 

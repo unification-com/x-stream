@@ -4,6 +4,7 @@ import (
 	"context"
 
 	errorsmod "cosmossdk.io/errors"
+	mathmod "cosmossdk.io/math"
 	"github.com/cosmos/cosmos-sdk/telemetry"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
@@ -53,6 +54,14 @@ func (k msgServer) CreateStream(goCtx context.Context, msg *types.MsgCreateStrea
 		return nil, errorsmod.Wrap(types.ErrStreamExists, "use update stream msg to modify existing stream")
 	}
 
+	// Per-sender stream cap: deter state-bloat. Enforced here rather than in
+	// ValidateBasic because it needs stream-count state.
+	if count := k.CountStreamsForSender(ctx, senderAddr); count >= types.MaxStreamsPerSender {
+		return nil, errorsmod.Wrapf(types.ErrInvalidData,
+			"sender %s already has %d open streams (max %d)",
+			senderAddr.String(), count, types.MaxStreamsPerSender)
+	}
+
 	if msg.FlowRate <= 0 {
 		return nil, errorsmod.Wrap(types.ErrInvalidData, "flow rate must be > zero")
 	}
@@ -61,6 +70,14 @@ func (k msgServer) CreateStream(goCtx context.Context, msg *types.MsgCreateStrea
 
 	if duration < 60 {
 		return nil, errorsmod.Wrap(types.ErrInvalidData, "calculated duration too short. Must be > 1 minute")
+	}
+
+	// Cap stream duration to prevent time.Duration overflow in the keeper
+	// math (nowTime.Add(time.Second * time.Duration(N)) wraps once N
+	// nanoseconds exceeds ~292 years).
+	if duration > types.MaxStreamDurationSeconds {
+		return nil, errorsmod.Wrapf(types.ErrInvalidData,
+			"calculated duration %d exceeds max %d seconds (10 years)", duration, types.MaxStreamDurationSeconds)
 	}
 
 	// create the "empty" stream
@@ -144,8 +161,25 @@ func (k msgServer) TopUpDeposit(goCtx context.Context, msg *types.MsgTopUpDeposi
 		return nil, errorsmod.Wrap(types.ErrInvalidData, "deposit must be > zero")
 	}
 
-	if !k.IsStream(ctx, receiverAddr, senderAddr, msg.Deposit.Denom) {
+	stream, ok := k.GetStream(ctx, receiverAddr, senderAddr, msg.Deposit.Denom)
+	if !ok {
 		return nil, errorsmod.Wrap(types.ErrInvalidData, "stream not found")
+	}
+
+	// Cap the prospective total duration. The keeper's AddDeposit adds the
+	// top-up's duration extension to the existing DepositZeroTime; compute
+	// the same extension here and reject if the total would breach the cap
+	// before any state mutates.
+	extensionSecs := types.CalculateDuration(msg.Deposit, stream.FlowRate)
+	nowTime := ctx.BlockTime()
+	var existingRemaining int64
+	if stream.DepositZeroTime.After(nowTime) {
+		existingRemaining = int64(stream.DepositZeroTime.Sub(nowTime).Seconds())
+	}
+	if existingRemaining+extensionSecs > types.MaxStreamDurationSeconds {
+		return nil, errorsmod.Wrapf(types.ErrInvalidData,
+			"top-up would extend stream duration beyond max %d seconds (10 years); current remaining=%d, extension=%d",
+			types.MaxStreamDurationSeconds, existingRemaining, extensionSecs)
 	}
 
 	// Add the requested deposit
@@ -156,7 +190,7 @@ func (k msgServer) TopUpDeposit(goCtx context.Context, msg *types.MsgTopUpDeposi
 	}
 
 	// get updated stream data
-	stream, _ := k.GetStream(ctx, receiverAddr, senderAddr, msg.Deposit.Denom)
+	stream, _ = k.GetStream(ctx, receiverAddr, senderAddr, msg.Deposit.Denom)
 
 	return &types.MsgTopUpDepositResponse{
 		DepositAmount:   msg.Deposit,
@@ -188,8 +222,21 @@ func (k msgServer) UpdateFlowRate(goCtx context.Context, msg *types.MsgUpdateFlo
 		return nil, errorsmod.Wrap(types.ErrInvalidData, err.Error())
 	}
 
-	if !k.IsStream(ctx, receiverAddr, senderAddr, msg.Denom) {
+	stream, ok := k.GetStream(ctx, receiverAddr, senderAddr, msg.Denom)
+	if !ok {
 		return nil, errorsmod.Wrap(types.ErrInvalidData, "stream not found")
+	}
+
+	// Cap the prospective new duration. SetNewFlowRate effectively resets
+	// the stream's deposit-zero time to (now + remaining_deposit/new_rate);
+	// reject if that exceeds the cap.
+	if stream.Deposit.Amount.GT(mathmod.NewIntFromUint64(0)) {
+		newDuration := types.CalculateDuration(stream.Deposit, msg.FlowRate)
+		if newDuration > types.MaxStreamDurationSeconds {
+			return nil, errorsmod.Wrapf(types.ErrInvalidData,
+				"new flow rate would extend duration beyond max %d seconds (10 years); calculated=%d",
+				types.MaxStreamDurationSeconds, newDuration)
+		}
 	}
 
 	// update the flow rate

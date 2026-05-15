@@ -55,23 +55,29 @@ func (q Keeper) AllStreamsForSender(c context.Context, req *types.QueryAllStream
 	}
 
 	ctx := sdk.UnwrapSDKContext(c)
+	rawStore := ctx.KVStore(q.storeKey)
 
-	store := prefix.NewStore(ctx.KVStore(q.storeKey), types.StreamKeyPrefix)
+	// Walk only the sender's slice of the secondary index. Each marker key
+	// gives us (receiver, denom); we resolve the full Stream via the primary
+	// store. O(streams-for-this-sender), not O(total streams).
+	idxStore := prefix.NewStore(rawStore, types.GetStreamsBySenderPrefixKey(senderAddr))
 
-	streams, pageRes, err := query.GenericFilteredPaginate(q.cdc, store, req.Pagination, func(key []byte, stream *types.Stream) (*types.StreamResult, error) {
-
-		// need to prefix the StreamKeyPrefix 0x11 to the returned key as AddressesFromStreamKey expects it
-		receiverAddr, s, denom := types.AddressesFromStreamKey(append(types.StreamKeyPrefix, key...))
-
-		// filter by sender address
-		if !s.Equals(senderAddr) {
+	streams, pageRes, err := query.GenericFilteredPaginate(q.cdc, idxStore, req.Pagination, func(key []byte, _ *types.Stream) (*types.StreamResult, error) {
+		receiverAddr, denom := types.ReceiverAndDenomFromSenderIndexRemainder(key)
+		if receiverAddr == nil || denom == "" {
+			// Defensive — skip any malformed index entry rather than fail the query.
 			return nil, nil
 		}
-
+		stream, ok := q.GetStream(ctx, receiverAddr, senderAddr, denom)
+		if !ok {
+			// Index entry references a missing primary record; skip rather
+			// than expose state inconsistency to callers.
+			return nil, nil
+		}
 		return &types.StreamResult{
 			Receiver: receiverAddr.String(),
 			Sender:   senderAddr.String(),
-			Stream:   stream,
+			Stream:   &stream,
 			Denom:    denom,
 		}, nil
 	}, func() *types.Stream { return &types.Stream{} })

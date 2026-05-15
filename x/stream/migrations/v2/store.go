@@ -6,6 +6,8 @@
 package v2
 
 import (
+	"fmt"
+
 	"github.com/cosmos/cosmos-sdk/codec"
 	storetypes "github.com/cosmos/cosmos-sdk/store/v2/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -29,7 +31,14 @@ func MigrateStore(ctx sdk.Context, storeKey storetypes.StoreKey, cdc codec.Binar
 
 	for ; iter.Valid(); iter.Next() {
 		var s types.Stream
-		cdc.MustUnmarshal(iter.Value(), &s)
+		if err := cdc.Unmarshal(iter.Value(), &s); err != nil {
+			// Halt the migration cleanly rather than silently dropping a
+			// row or panicking mid-loop. Operator intervention required:
+			// inspect the offending key and decide whether to repair state
+			// before re-running.
+			_ = iter.Close()
+			return fmt.Errorf("v1→v2 migration: corrupt stream entry at key %x: %w", iter.Key(), err)
+		}
 
 		receiver, sender := AddressesFromStreamKeyV1(iter.Key())
 		newKey := newStreamKeyV2(receiver, sender, s.Deposit.Denom)
@@ -48,8 +57,27 @@ func MigrateStore(ctx sdk.Context, storeKey storetypes.StoreKey, cdc codec.Binar
 	for _, r := range batch {
 		store.Delete(r.oldKey)
 		store.Set(r.newKey, r.value)
+		// Also build the sender secondary index added in v0.1.0. The v1→v2
+		// migration is the only path that brings pre-existing streams into a
+		// chain running this version, so this is the natural place to backfill.
+		store.Set(senderIndexKeyFromV2(r.newKey), []byte{})
 	}
 	return nil
+}
+
+// senderIndexKeyFromV2 extracts (receiver, sender, denom) from a v2 primary key
+// and assembles the corresponding sender-index key. Mirrors
+// types.GetStreamBySenderKey but is kept local so the migration is insulated
+// from future drift in the live key constructors.
+func senderIndexKeyFromV2(v2Key []byte) []byte {
+	receiver, sender, denom := types.AddressesFromStreamKey(v2Key)
+	out := append([]byte{}, types.StreamBySenderKeyPrefix...)
+	out = append(out, address.MustLengthPrefix(sender)...)
+	out = append(out, address.MustLengthPrefix(receiver)...)
+	denomBytes := []byte(denom)
+	out = append(out, byte(len(denomBytes)))
+	out = append(out, denomBytes...)
+	return out
 }
 
 // AddressesFromStreamKeyV1 is a frozen copy of the pre-v2 key parser.
