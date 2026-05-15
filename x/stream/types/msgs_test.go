@@ -1,12 +1,13 @@
 package types_test
 
 import (
-	"github.com/cosmos/cosmos-sdk/codec"
-	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
+	"fmt"
 	"testing"
 
 	mathmod "cosmossdk.io/math"
 	"github.com/cometbft/cometbft/crypto/ed25519"
+	"github.com/cosmos/cosmos-sdk/codec"
+	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
@@ -300,7 +301,9 @@ func TestMsgCreateStreamGetSignBytes(t *testing.T) {
 	pc := codec.NewProtoCodec(codectypes.NewInterfaceRegistry())
 	res, err := pc.MarshalAminoJSON(msg)
 	require.NoError(t, err)
-	expected := `{"type":"stream/MsgCreateStream","value":{"deposit":{"amount":"1000","denom":"nund"},"flow_rate":"1","receiver":"und1v9jxgu3jylfr2w","sender":"und1v9jxgu332vu4y3"}}`
+	expected := fmt.Sprintf(
+		`{"type":"stream/MsgCreateStream","value":{"deposit":{"amount":"1000","denom":%q},"flow_rate":"1","receiver":%q,"sender":%q}}`,
+		sdk.DefaultBondDenom, receiver.String(), sender.String())
 	require.Equal(t, expected, string(res))
 }
 
@@ -311,7 +314,9 @@ func TestMsgClaimStreamGetSignBytes(t *testing.T) {
 	pc := codec.NewProtoCodec(codectypes.NewInterfaceRegistry())
 	res, err := pc.MarshalAminoJSON(msg)
 	require.NoError(t, err)
-	expected := `{"type":"stream/MsgClaimStream","value":{"denom":"nund","receiver":"und1v9jxgu3jylfr2w","sender":"und1v9jxgu332vu4y3"}}`
+	expected := fmt.Sprintf(
+		`{"type":"stream/MsgClaimStream","value":{"denom":%q,"receiver":%q,"sender":%q}}`,
+		sdk.DefaultBondDenom, receiver.String(), sender.String())
 	require.Equal(t, expected, string(res))
 }
 
@@ -323,7 +328,9 @@ func TestMsgTopUpDepositGetSignBytes(t *testing.T) {
 	pc := codec.NewProtoCodec(codectypes.NewInterfaceRegistry())
 	res, err := pc.MarshalAminoJSON(msg)
 	require.NoError(t, err)
-	expected := `{"type":"stream/MsgTopUpDeposit","value":{"deposit":{"amount":"1000","denom":"nund"},"receiver":"und1v9jxgu3jylfr2w","sender":"und1v9jxgu332vu4y3"}}`
+	expected := fmt.Sprintf(
+		`{"type":"stream/MsgTopUpDeposit","value":{"deposit":{"amount":"1000","denom":%q},"receiver":%q,"sender":%q}}`,
+		sdk.DefaultBondDenom, receiver.String(), sender.String())
 	require.Equal(t, expected, string(res))
 }
 
@@ -334,7 +341,9 @@ func TestMsgUpdateFlowRateGetSignBytes(t *testing.T) {
 	pc := codec.NewProtoCodec(codectypes.NewInterfaceRegistry())
 	res, err := pc.MarshalAminoJSON(msg)
 	require.NoError(t, err)
-	expected := `{"type":"stream/MsgUpdateFlowRate","value":{"denom":"nund","flow_rate":"1","receiver":"und1v9jxgu3jylfr2w","sender":"und1v9jxgu332vu4y3"}}`
+	expected := fmt.Sprintf(
+		`{"type":"stream/MsgUpdateFlowRate","value":{"denom":%q,"flow_rate":"1","receiver":%q,"sender":%q}}`,
+		sdk.DefaultBondDenom, receiver.String(), sender.String())
 	require.Equal(t, expected, string(res))
 }
 
@@ -345,6 +354,8 @@ func TestMsgCancelStreamGetSignBytes(t *testing.T) {
 	pc := codec.NewProtoCodec(codectypes.NewInterfaceRegistry())
 	res, err := pc.MarshalAminoJSON(msg)
 	require.NoError(t, err)
-	expected := `{"type":"stream/MsgCancelStream","value":{"denom":"nund","receiver":"und1v9jxgu3jylfr2w","sender":"und1v9jxgu332vu4y3"}}`
+	expected := fmt.Sprintf(
+		`{"type":"stream/MsgCancelStream","value":{"denom":%q,"receiver":%q,"sender":%q}}`,
+		sdk.DefaultBondDenom, receiver.String(), sender.String())
 	require.Equal(t, expected, string(res))
 }
