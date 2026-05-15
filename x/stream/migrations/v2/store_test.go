@@ -11,7 +11,6 @@ import (
 	moduletestutil "github.com/cosmos/cosmos-sdk/types/module/testutil"
 	"github.com/stretchr/testify/require"
 
-	"github.com/unification-com/mainchain/app/params"
 	"github.com/unification-com/x-stream/x/stream"
 	v2 "github.com/unification-com/x-stream/x/stream/migrations/v2"
 	"github.com/unification-com/x-stream/x/stream/types"
@@ -34,7 +33,6 @@ func v1Key(receiver, sender sdk.AccAddress) []byte {
 }
 
 func TestMigrateStore(t *testing.T) {
-	params.SetAddressPrefixes()
 
 	encCfg := moduletestutil.MakeTestEncodingConfig(stream.AppModuleBasic{})
 	cdc := encCfg.Codec

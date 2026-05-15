@@ -6,10 +6,11 @@ import (
 	mathmod "cosmossdk.io/math"
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
 	"github.com/stretchr/testify/suite"
 
-	simapp "github.com/unification-com/mainchain/app"
-	simapphelpers "github.com/unification-com/mainchain/app/helpers"
+	"github.com/unification-com/x-stream/simapp"
 	"github.com/unification-com/x-stream/x/stream/keeper"
 	"github.com/unification-com/x-stream/x/stream/types"
 )
@@ -17,7 +18,7 @@ import (
 type KeeperTestSuite struct {
 	suite.Suite
 
-	app         *simapp.App
+	app         *simapp.SimApp
 	ctx         sdk.Context
 	queryClient types.QueryClient
 	addrs       []sdk.AccAddress
@@ -29,7 +30,7 @@ func TestKeeperTestSuite(t *testing.T) {
 }
 
 func (s *KeeperTestSuite) SetupTest() {
-	app := simapphelpers.Setup(s.T())
+	app := simapp.Setup(s.T(), false)
 	ctx := app.BaseApp.NewContext(false)
 
 	queryHelper := baseapp.NewQueryServerTestHelper(ctx, app.InterfaceRegistry())
@@ -39,11 +40,14 @@ func (s *KeeperTestSuite) SetupTest() {
 	s.app = app
 	s.ctx = ctx
 	s.queryClient = queryClient
-	s.addrs = simapphelpers.AddTestAddrsIncremental(app, ctx, 100, mathmod.NewInt(1000000000000000000))
+	s.addrs = simapp.AddTestAddrsIncremental(app, ctx, 100, mathmod.NewInt(1000000000000000000))
 	s.msgServer = keeper.NewMsgServerImpl(s.app.StreamKeeper)
 }
 
 func (s *KeeperTestSuite) TestGetAuthority() {
+	// Authority is the gov module account address; deterministic from the bech32 prefix
+	// configured at the application level (SDK simapp uses the default "cosmos" prefix).
 	authority := s.app.StreamKeeper.GetAuthority()
-	s.Equal("und10d07y265gmmuvt4z0w9aw880jnsr700ja85vs4", authority)
+	expected := authtypes.NewModuleAddress(govtypes.ModuleName).String()
+	s.Equal(expected, authority)
 }

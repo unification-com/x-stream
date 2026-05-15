@@ -5,6 +5,8 @@ import (
 
 	mathmod "cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+	distrtypes "github.com/cosmos/cosmos-sdk/x/distribution/types"
 
 	"github.com/unification-com/x-stream/x/stream/types"
 )
@@ -172,8 +174,9 @@ func (s *KeeperTestSuite) TestMsgServerCreateStream() {
 		{
 			name: "invalid - receiver address blocked",
 			request: &types.MsgCreateStream{
-				Sender:   s.addrs[0].String(),
-				Receiver: "und17xpfvakm2amg962yls6f84z3kell8c5lhuyfdm", // module account with no banking permissions
+				Sender: s.addrs[0].String(),
+				// distribution module account has no banking permissions (blocked recipient)
+				Receiver: authtypes.NewModuleAddress(distrtypes.ModuleName).String(),
 				Deposit:  sdk.NewInt64Coin(sdk.DefaultBondDenom, 1000),
 				FlowRate: 1,
 			},

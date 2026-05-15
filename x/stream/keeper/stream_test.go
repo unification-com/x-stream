@@ -6,7 +6,7 @@ import (
 	mathmod "cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	simapphelpers "github.com/unification-com/mainchain/app/helpers"
+	"github.com/unification-com/x-stream/simapp"
 	"github.com/unification-com/x-stream/x/stream/types"
 )
 
@@ -724,7 +724,7 @@ func (s *KeeperTestSuite) TestAddDeposit_Fail_InsufficientBalance() {
 
 func (s *KeeperTestSuite) TestAddDeposit_Fail_Denom_Mismatch() {
 
-	newAccs := simapphelpers.AddTestAddrsWithExtraNonBondCoin(s.app, s.ctx, 2, mathmod.NewIntFromUint64(10000000), sdk.NewInt64Coin("notstake", 1000000))
+	newAccs := simapp.AddTestAddrsWithExtraNonBondCoin(s.app, s.ctx, 2, mathmod.NewIntFromUint64(10000000), sdk.NewInt64Coin("notstake", 1000000))
 
 	// set stream
 	nowTime := s.ctx.BlockTime()
@@ -2095,7 +2095,7 @@ func (s *KeeperTestSuite) TestIterateAllStreams() {
 }
 
 func (s *KeeperTestSuite) TestMultipleDenoms() {
-	newAccs := simapphelpers.AddTestAddrsWithExtraNonBondCoin(s.app, s.ctx, 100, mathmod.NewIntFromUint64(10000000), sdk.NewInt64Coin("testdenom", 1000000))
+	newAccs := simapp.AddTestAddrsWithExtraNonBondCoin(s.app, s.ctx, 100, mathmod.NewIntFromUint64(10000000), sdk.NewInt64Coin("testdenom", 1000000))
 
 	tCtx := s.ctx
 	nowTime := time.Unix(time.Now().Unix(), 0).UTC()
@@ -2147,7 +2147,7 @@ func (s *KeeperTestSuite) TestMultipleDenoms() {
 // concurrent streams (one per denom) and that operations on one denom do not affect
 // the other. This is the core invariant introduced by the v2 key change.
 func (s *KeeperTestSuite) TestSamePairTwoDenoms() {
-	newAccs := simapphelpers.AddTestAddrsWithExtraNonBondCoin(s.app, s.ctx, 2,
+	newAccs := simapp.AddTestAddrsWithExtraNonBondCoin(s.app, s.ctx, 2,
 		mathmod.NewIntFromUint64(10000000),
 		sdk.NewInt64Coin("testdenom", 1000000))
 
