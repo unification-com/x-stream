@@ -102,6 +102,16 @@ go build ./...
 go test ./...
 ```
 
+Make targets for the additional CI gates:
+
+```sh
+make lint                      # gofmt -s check + golangci-lint v2
+make fmt                       # apply gofmt -s in place
+make test-sim-simple           # single-seed 500-block sim (~35s)
+make test-sim-multi-seed-short # 3 seeds × 50 blocks determinism check (~20s)
+make test-sim-nondeterminism   # 3 seeds × 100 blocks × 3 runs determinism (~5min)
+```
+
 ## Proto regeneration
 
 ```sh
