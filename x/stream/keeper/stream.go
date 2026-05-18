@@ -81,7 +81,7 @@ func (k Keeper) DeleteStream(ctx sdk.Context, receiverAddr, senderAddr sdk.AccAd
 func (k Keeper) CountStreamsForSender(ctx sdk.Context, senderAddr sdk.AccAddress) int {
 	store := ctx.KVStore(k.storeKey)
 	iter := storetypes.KVStorePrefixIterator(store, types.GetStreamsBySenderPrefixKey(senderAddr))
-	defer iter.Close()
+	defer func() { _ = iter.Close() }()
 	count := 0
 	for ; iter.Valid(); iter.Next() {
 		count++
@@ -96,7 +96,7 @@ func (k Keeper) CountStreamsForSender(ctx sdk.Context, senderAddr sdk.AccAddress
 func (k Keeper) IterateAllStreams(ctx sdk.Context, cb func(sdk.AccAddress, sdk.AccAddress, string, types.Stream) bool) {
 	store := ctx.KVStore(k.storeKey)
 	iterator := storetypes.KVStorePrefixIterator(store, types.StreamKeyPrefix)
-	defer iterator.Close()
+	defer func() { _ = iterator.Close() }()
 
 	for ; iterator.Valid(); iterator.Next() {
 		receiverAddr, senderAddr, denom := types.AddressesFromStreamKey(iterator.Key())

@@ -7,7 +7,6 @@ import (
 	"github.com/cosmos/cosmos-sdk/codec"
 	storetypes "github.com/cosmos/cosmos-sdk/store/v2/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 
 	"github.com/unification-com/x-stream/x/stream/types"
 )
@@ -74,7 +73,7 @@ func (k Keeper) GetStoreKey() storetypes.StoreKey {
 }
 
 // GetStreamModuleAccount returns the stream ModuleAccount
-func (k Keeper) GetStreamModuleAccount(ctx sdk.Context) authtypes.ModuleAccountI {
+func (k Keeper) GetStreamModuleAccount(ctx sdk.Context) sdk.ModuleAccountI {
 	return k.accKeeper.GetModuleAccount(ctx, types.ModuleName)
 }
 

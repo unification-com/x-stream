@@ -43,8 +43,8 @@ func PeriodEnumFromString(period string) StreamPeriod {
 }
 
 func CalculateFlowRateForCoin(coin sdk.Coin, period StreamPeriod, duration uint64) (uint64, mathmod.LegacyDec, int64) {
-	baseDuration := uint64(1)
-	totalDuration := uint64(1)
+	var baseDuration uint64
+	var totalDuration uint64
 
 	switch period {
 	case StreamPeriodUnspecified:

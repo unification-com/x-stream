@@ -105,7 +105,7 @@ func (s *KeeperTestSuite) TestQueryStreamByReceiverSender() {
 						DepositZeroTime: time.Unix(nowTime.Unix()+1000, 0).UTC(),
 						Cancellable:     true,
 					},
-					Denom:    sdk.DefaultBondDenom,
+					Denom: sdk.DefaultBondDenom,
 				},
 			},
 			expErr:    false,

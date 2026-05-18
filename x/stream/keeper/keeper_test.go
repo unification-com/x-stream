@@ -32,7 +32,7 @@ func TestKeeperTestSuite(t *testing.T) {
 
 func (s *KeeperTestSuite) SetupTest() {
 	app := simapp.Setup(s.T(), false)
-	ctx := app.BaseApp.NewContext(false)
+	ctx := app.NewContext(false)
 
 	queryHelper := baseapp.NewQueryServerTestHelper(ctx, app.InterfaceRegistry())
 	types.RegisterQueryServer(queryHelper, app.StreamKeeper)

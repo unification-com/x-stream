@@ -115,7 +115,8 @@ func GetStreamBySenderKey(senderAddr sdk.AccAddress, receiverAddr sdk.AccAddress
 
 // GetStreamsBySenderPrefixKey is the prefix that selects every secondary-index
 // entry for a given sender.
-//   0x12 | len(sender) | sender
+//
+//	0x12 | len(sender) | sender
 func GetStreamsBySenderPrefixKey(senderAddr sdk.AccAddress) []byte {
 	return append(StreamBySenderKeyPrefix, address.MustLengthPrefix(senderAddr)...)
 }

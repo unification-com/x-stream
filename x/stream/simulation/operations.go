@@ -20,11 +20,11 @@ import (
 //
 //nolint:gosec // These aren't harcoded credentials.
 const (
-	OpWeightMsgCreateStream            = "op_weight_msg_create_stream"
-	OpWeightMsgClaimStream             = "op_weight_msg_claim_stream"
-	OpWeightMsgTopUpDeposit            = "op_weight_msg_top_up_deposit"
-	OpWeightMsgUpdateFlowRate          = "op_weight_msg_update_flow_rate"
-	OpWeightMsgCancelStream            = "op_weight_msg_cancel_stream"
+	OpWeightMsgCreateStream   = "op_weight_msg_create_stream"
+	OpWeightMsgClaimStream    = "op_weight_msg_claim_stream"
+	OpWeightMsgTopUpDeposit   = "op_weight_msg_top_up_deposit"
+	OpWeightMsgUpdateFlowRate = "op_weight_msg_update_flow_rate"
+	OpWeightMsgCancelStream   = "op_weight_msg_cancel_stream"
 	// NOTE: stream weights are tentative — Mainchain doesn't currently use multi-denom
 	// streams in production, and these defaults will be re-tuned when the stream module
 	// is extracted into its own Go package for wider distribution. Keep the relative
@@ -375,7 +375,7 @@ func SimulateMsgUpdateFlowRate(txGen client.TxConfig, ak types.AccountKeeper, bk
 		}
 
 		halfFlow := stream.FlowRate / 2
-		newFlow := stream.FlowRate
+		var newFlow int64
 		rnd := simtypes.RandIntBetween(r, 1, 2)
 
 		if rnd == 1 {

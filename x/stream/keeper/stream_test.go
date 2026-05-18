@@ -206,7 +206,7 @@ func (s *KeeperTestSuite) TestAddDeposit_Basic_Success() {
 	s.Require().True(hasEvent)
 
 	// get stream from keeper
-	stream, ok := s.app.StreamKeeper.GetStream(s.ctx, s.addrs[1], s.addrs[0], sdk.DefaultBondDenom)
+	stream, _ := s.app.StreamKeeper.GetStream(s.ctx, s.addrs[1], s.addrs[0], sdk.DefaultBondDenom)
 	// should now be 1000stake
 	s.Require().Equal(sdk.NewCoin(sdk.DefaultBondDenom, mathmod.NewIntFromUint64(1000)), stream.Deposit)
 	// Deposit of 1000, flow rate of 100/s, should have deposit zero time of now + 10s
@@ -1851,7 +1851,7 @@ func (s *KeeperTestSuite) TestCancelStreamBySenderReceiver_Scenarios() {
 			}
 
 			// check stream
-			stream, ok := s.app.StreamKeeper.GetStream(tCtx, tc.receiver, tc.sender, sdk.DefaultBondDenom)
+			_, ok := s.app.StreamKeeper.GetStream(tCtx, tc.receiver, tc.sender, sdk.DefaultBondDenom)
 			s.Require().True(ok, "GetStream ok NoError test name %s", tc.name)
 
 			cancelTime := time.Unix(nowTime.Unix()+tc.cancelTimeOffset, 0).UTC()
@@ -1947,7 +1947,7 @@ func (s *KeeperTestSuite) TestCancelStreamBySenderReceiver_Scenarios() {
 			s.Require().True(hasCancelEvent)
 
 			// check stream deleted
-			stream, ok = s.app.StreamKeeper.GetStream(tCtx, tc.receiver, tc.sender, sdk.DefaultBondDenom)
+			stream, ok := s.app.StreamKeeper.GetStream(tCtx, tc.receiver, tc.sender, sdk.DefaultBondDenom)
 			s.Require().False(ok, "GetStream ok NoError test name %s", tc.name)
 			// should empty
 			s.Require().Equal(types.Stream{}, stream, "empty stream returned test name %s", tc.name)

@@ -93,7 +93,7 @@ func (k msgServer) CreateStream(goCtx context.Context, msg *types.MsgCreateStrea
 		return nil, err
 	}
 
-	defer telemetry.IncrCounter(1, types.ModuleName, types.EventTypeCreateStreamAction)
+	defer telemetry.IncrCounter(1, types.ModuleName, types.EventTypeCreateStreamAction) //nolint:staticcheck // SDK-wide deprecation of telemetry wrappers; no in-tree replacement yet
 
 	return &types.MsgCreateStreamResponse{
 		Receiver: msg.Receiver,

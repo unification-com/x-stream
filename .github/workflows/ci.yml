@@ -52,6 +52,18 @@ jobs:
       - name: go test -race ./...
         run: go test -mod=readonly -race ./...
 
+  fmt:
+    name: gofmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.9'
+          cache: true
+      - name: make fmt-check
+        run: make fmt-check
+
   lint:
     name: Lint
     runs-on: ubuntu-latest

@@ -115,7 +115,7 @@ func TestMigrateStore(t *testing.T) {
 		expected[s.receiver.String()+"|"+s.sender.String()] = s.stream.Deposit.Denom
 	}
 	iter := storetypes.KVStorePrefixIterator(store, types.StreamKeyPrefix)
-	defer iter.Close()
+	defer func() { _ = iter.Close() }()
 	saw := map[string]string{}
 	for ; iter.Valid(); iter.Next() {
 		r, snd, d := types.AddressesFromStreamKey(iter.Key())

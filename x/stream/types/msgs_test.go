@@ -46,9 +46,9 @@ func TestMsgCreateStream_ValidateBasic(t *testing.T) {
 		{sdk.NewCoin(sdk.DefaultBondDenom, mathmod.NewIntFromUint64(100)), 100, r, s, false},
 		{sdk.NewCoin(sdk.DefaultBondDenom, mathmod.NewIntFromUint64(10000)), 100, r, r, false},
 		// Malformed denoms rejected at ValidateBasic
-		{sdk.Coin{Denom: "1invalid", Amount: mathmod.NewIntFromUint64(10000)}, 100, r, s, false}, // starts with digit
-		{sdk.Coin{Denom: "x", Amount: mathmod.NewIntFromUint64(10000)}, 100, r, s, false},        // too short
-		{sdk.Coin{Denom: "", Amount: mathmod.NewIntFromUint64(10000)}, 100, r, s, false},         // empty
+		{sdk.Coin{Denom: "1invalid", Amount: mathmod.NewIntFromUint64(10000)}, 100, r, s, false},  // starts with digit
+		{sdk.Coin{Denom: "x", Amount: mathmod.NewIntFromUint64(10000)}, 100, r, s, false},         // too short
+		{sdk.Coin{Denom: "", Amount: mathmod.NewIntFromUint64(10000)}, 100, r, s, false},          // empty
 		{sdk.Coin{Denom: "has space", Amount: mathmod.NewIntFromUint64(10000)}, 100, r, s, false}, // space not allowed
 	}
 

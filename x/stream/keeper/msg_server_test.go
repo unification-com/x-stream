@@ -275,7 +275,7 @@ func (s *KeeperTestSuite) TestMsgServerCreateStream() {
 				Sender:   s.addrs[2].String(),
 				Receiver: s.addrs[3].String(),
 				Deposit:  sdk.NewInt64Coin(sdk.DefaultBondDenom, 400_000_000), // 400M nund
-				FlowRate: 1,                                                    // → 400M seconds ≈ 12.7 years
+				FlowRate: 1,                                                   // → 400M seconds ≈ 12.7 years
 			},
 			expResult: nil,
 			expectErr: true,
