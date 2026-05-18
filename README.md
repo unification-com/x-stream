@@ -14,11 +14,11 @@ Extracted from [unification-com/mainchain](https://github.com/unification-com/ma
 
 ## Compatibility
 
-| | Version |
-|---|---|
-| Cosmos SDK | `v0.54.x` |
-| CometBFT | `v0.39.x` |
-| Go | `>= 1.25.9` |
+|            | Version     |
+|------------|-------------|
+| Cosmos SDK | `v0.54.x`   |
+| CometBFT   | `v0.39.x`   |
+| Go         | `>= 1.25.9` |
 
 ## Quick integration
 
