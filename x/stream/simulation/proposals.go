@@ -36,7 +36,8 @@ func SimulateMsgUpdateParams(r *rand.Rand, _ sdk.Context, _ []simtypes.Account) 
 	var authority sdk.AccAddress = address.Module("gov")
 
 	params := types.DefaultParams()
-	params.ValidatorFee = mathmod.LegacyNewDecWithPrec(int64(r.Intn(24)), 2)
+	// 0% to 10% inclusive — matches types.MaxValidatorFee (post-audit hard cap).
+	params.ValidatorFee = mathmod.LegacyNewDecWithPrec(int64(r.Intn(11)), 2)
 
 	return &types.MsgUpdateParams{
 		Authority: authority.String(),

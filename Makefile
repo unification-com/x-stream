@@ -3,6 +3,7 @@
 DOCKER := $(shell which docker)
 
 include scripts/makefiles/proto.mk
+include scripts/makefiles/sims.mk
 include scripts/makefiles/unittests.mk
 
 all: lint test
