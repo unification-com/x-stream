@@ -77,3 +77,17 @@ jobs:
         with:
           version: v2.4.0
           args: --timeout=5m
+
+  sims:
+    name: Simulations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.9'
+          cache: true
+      - name: make test-sim-simple
+        run: make test-sim-simple
+      - name: make test-sim-multi-seed-short
+        run: make test-sim-multi-seed-short
