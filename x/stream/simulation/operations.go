@@ -148,7 +148,13 @@ func SimulateMsgCreateStream(txGen client.TxConfig, ak types.AccountKeeper, bk t
 			return simtypes.NoOpMsg(types.ModuleName, types.CreateStreamAction, "maxFlowRate too low"), nil, nil
 		}
 
-		randFowRate := int64(simtypes.RandIntBetween(r, 1, int(maxFlowRate.Uint64())))
+		// Floor flow rate so duration = deposit/flow stays within MaxStreamDurationSeconds.
+		// flow >= ceil(deposit / MaxStreamDurationSeconds).
+		minFlowInt := deposit.Amount.Quo(mathmod.NewIntFromUint64(uint64(types.MaxStreamDurationSeconds))).Int64() + 1
+		if minFlowInt > maxFlowRate.Int64() {
+			return simtypes.NoOpMsg(types.ModuleName, types.CreateStreamAction, "deposit too large for MaxStreamDurationSeconds"), nil, nil
+		}
+		randFowRate := int64(simtypes.RandIntBetween(r, int(minFlowInt), int(maxFlowRate.Uint64())))
 
 		msg := types.NewMsgCreateStream(deposit, randFowRate, receiver.Address, sender.Address)
 
@@ -278,6 +284,8 @@ func SimulateMsgTopUpDeposit(txGen client.TxConfig, ak types.AccountKeeper, bk t
 			return simtypes.NoOpMsg(types.ModuleName, types.TopUpDepositAction, "suitable stream not found"), nil, nil
 		}
 
+		stream, _ := k.GetStream(ctx, receiver.Address, sender.Address, sdk.DefaultBondDenom)
+
 		simAccount, _ := simtypes.FindAccount(accs, sender.Address)
 		if simAccount.PrivKey == nil {
 			return simtypes.NoOpMsg(types.ModuleName, types.TopUpDepositAction, "account private key is nil"), nil, nil // skip
@@ -295,6 +303,21 @@ func SimulateMsgTopUpDeposit(txGen client.TxConfig, ak types.AccountKeeper, bk t
 
 		if depositAmnt.LT(mathmod.NewIntFromUint64(60)) {
 			return simtypes.NoOpMsg(types.ModuleName, types.TopUpDepositAction, "depositAmnt too small"), nil, nil
+		}
+
+		// Cap deposit so current_remaining + (deposit/flow) <= MaxStreamDurationSeconds.
+		nowSec := ctx.BlockTime().Unix()
+		remainingSec := stream.DepositZeroTime.Unix() - nowSec
+		if remainingSec < 0 {
+			remainingSec = 0
+		}
+		maxExtSec := types.MaxStreamDurationSeconds - remainingSec
+		if maxExtSec <= 0 {
+			return simtypes.NoOpMsg(types.ModuleName, types.TopUpDepositAction, "stream already at max duration"), nil, nil
+		}
+		maxAllowedDeposit := mathmod.NewInt(maxExtSec).Mul(mathmod.NewInt(stream.FlowRate))
+		if depositAmnt.GT(maxAllowedDeposit) {
+			depositAmnt = maxAllowedDeposit
 		}
 
 		deposit := sdk.NewCoin(sdk.DefaultBondDenom, depositAmnt)
@@ -387,6 +410,15 @@ func SimulateMsgUpdateFlowRate(txGen client.TxConfig, ak types.AccountKeeper, bk
 		// unlikely but just in case
 		if newFlow <= 0 {
 			return simtypes.NoOpMsg(types.ModuleName, types.UpdateFlowRateAction, "new flow must be greater than zero"), nil, nil
+		}
+
+		// Floor new flow so the resulting duration (current_deposit / new_flow)
+		// stays within MaxStreamDurationSeconds.
+		if stream.Deposit.Amount.IsPositive() {
+			minFlow := stream.Deposit.Amount.Quo(mathmod.NewIntFromUint64(uint64(types.MaxStreamDurationSeconds))).Int64() + 1
+			if newFlow < minFlow {
+				newFlow = minFlow
+			}
 		}
 
 		msg := types.NewMsgUpdateFlowRate(receiver.Address, sender.Address, newFlow, sdk.DefaultBondDenom)

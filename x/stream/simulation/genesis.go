@@ -16,10 +16,10 @@ const (
 	ValidatorFee = "validator_fee"
 )
 
-// GenValidatorFee randomized ValidatorFee
+// GenValidatorFee randomized ValidatorFee — 0% to 10% inclusive, matching the
+// hard cap enforced by types.MaxValidatorFee (post-audit).
 func GenValidatorFee(r *rand.Rand) mathmod.LegacyDec {
-	// 0 to 50%
-	return mathmod.LegacyNewDecWithPrec(int64(r.Intn(24)), 2)
+	return mathmod.LegacyNewDecWithPrec(int64(r.Intn(11)), 2)
 }
 
 // RandomizedGenState generates a random GenesisState for the stream module.

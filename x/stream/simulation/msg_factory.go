@@ -68,7 +68,13 @@ func MsgCreateStreamFactory(k keeper.Keeper) simsx.SimMsgFactoryFn[*types.MsgCre
 			reporter.Skip("maxFlow too low")
 			return nil, nil
 		}
-		flowRate := int64(r.IntInRange(1, int(maxFlow.Uint64())))
+		// Floor flow so duration = deposit/flow stays within MaxStreamDurationSeconds.
+		minFlow := deposit.Amount.Quo(math.NewIntFromUint64(uint64(types.MaxStreamDurationSeconds))).Int64() + 1
+		if minFlow > maxFlow.Int64() {
+			reporter.Skip("deposit too large for MaxStreamDurationSeconds")
+			return nil, nil
+		}
+		flowRate := int64(r.IntInRange(int(minFlow), int(maxFlow.Uint64())))
 		return []simsx.SimAccount{sender}, types.NewMsgCreateStream(deposit, flowRate, receiver.Address, sender.Address)
 	}
 }
@@ -113,6 +119,21 @@ func MsgTopUpDepositFactory(k keeper.Keeper) simsx.SimMsgFactoryFn[*types.MsgTop
 			reporter.Skip("top-up amount too small")
 			return nil, nil
 		}
+		// Cap deposit so current_remaining + (deposit/flow) <= MaxStreamDurationSeconds.
+		nowSec := sdkCtx.BlockTime().Unix()
+		remainingSec := ref.stream.DepositZeroTime.Unix() - nowSec
+		if remainingSec < 0 {
+			remainingSec = 0
+		}
+		maxExtSec := types.MaxStreamDurationSeconds - remainingSec
+		if maxExtSec <= 0 {
+			reporter.Skip("stream already at max duration")
+			return nil, nil
+		}
+		maxAllowedDeposit := math.NewInt(maxExtSec).Mul(math.NewInt(ref.stream.FlowRate))
+		if deposit.Amount.GT(maxAllowedDeposit) {
+			deposit = sdk.NewCoin(deposit.Denom, maxAllowedDeposit)
+		}
 		return []simsx.SimAccount{sender}, types.NewMsgTopUpDeposit(ref.receiver, ref.sender, deposit)
 	}
 }
@@ -139,6 +160,14 @@ func MsgUpdateFlowRateFactory(k keeper.Keeper) simsx.SimMsgFactoryFn[*types.MsgU
 		if newFlow <= 0 {
 			reporter.Skip("new flow rate must be positive")
 			return nil, nil
+		}
+		// Floor flow so resulting duration (current_deposit / new_flow) stays
+		// within MaxStreamDurationSeconds.
+		if ref.stream.Deposit.Amount.IsPositive() {
+			minFlow := ref.stream.Deposit.Amount.Quo(math.NewIntFromUint64(uint64(types.MaxStreamDurationSeconds))).Int64() + 1
+			if newFlow < minFlow {
+				newFlow = minFlow
+			}
 		}
 		return []simsx.SimAccount{sender}, types.NewMsgUpdateFlowRate(ref.receiver, ref.sender, newFlow, ref.denom)
 	}
