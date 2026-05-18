@@ -1,0 +1,28 @@
+# OS
+.DS_Store
+
+# IDEs
+.vscode
+.idea
+
+# Build
+build
+/ev-provision/
+dist
+docs/.vuepress/dist
+.vers_docker
+
+# Testing
+coverage.txt
+profile.out
+cpuprofile.out
+memprofile.out
+simapp.test
+app.test
+cpu.out
+mem.out
+tests/testdata
+
+# Graphviz
+dependency-graph.png
+
