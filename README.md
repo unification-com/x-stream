@@ -18,7 +18,7 @@ Extracted from [unification-com/mainchain](https://github.com/unification-com/ma
 |------------|-------------|
 | Cosmos SDK | `v0.54.x`   |
 | CometBFT   | `v0.39.x`   |
-| Go         | `>= 1.25.9` |
+| Go         | `>= 1.26.5` |
 
 ## Quick integration
 

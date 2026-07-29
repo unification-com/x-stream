@@ -16,6 +16,25 @@ import (
 	"github.com/unification-com/x-stream/x/stream/types"
 )
 
+// TestValidateBasic_IBCDenom proves the stateless message validation accepts an IBC
+// voucher denom (ibc/<hash>) on every stream message — nothing restricts streams to the
+// bond/native denom. The full end-to-end escrow/claim/refund proof lives in the keeper
+// test TestMsgServerStreamLifecycle_IBCDenom.
+func TestValidateBasic_IBCDenom(t *testing.T) {
+	r := sdk.AccAddress(ed25519.GenPrivKey().PubKey().Address()).String()
+	s := sdk.AccAddress(ed25519.GenPrivKey().PubKey().Address()).String()
+	// A real-shape IBC voucher denom: "ibc/" + 64 uppercase hex (the denom-trace hash).
+	const ibcDenom = "ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2"
+	require.NoError(t, sdk.ValidateDenom(ibcDenom))
+
+	// deposit/flow = 10000/100 = 100s, comfortably inside the 60s..10y duration bounds.
+	require.NoError(t, types.MsgCreateStream{Sender: s, Receiver: r, Deposit: sdk.NewInt64Coin(ibcDenom, 10000), FlowRate: 100}.ValidateBasic())
+	require.NoError(t, types.MsgClaimStream{Sender: s, Receiver: r, Denom: ibcDenom}.ValidateBasic())
+	require.NoError(t, types.MsgCancelStream{Sender: s, Receiver: r, Denom: ibcDenom}.ValidateBasic())
+	require.NoError(t, types.MsgUpdateFlowRate{Sender: s, Receiver: r, FlowRate: 100, Denom: ibcDenom}.ValidateBasic())
+	require.NoError(t, types.MsgTopUpDeposit{Sender: s, Receiver: r, Deposit: sdk.NewInt64Coin(ibcDenom, 10000)}.ValidateBasic())
+}
+
 //	MsgCreateStream{}
 
 func TestMsgCreateStream_Route(t *testing.T) {

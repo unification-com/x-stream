@@ -8,6 +8,7 @@ import (
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	distrtypes "github.com/cosmos/cosmos-sdk/x/distribution/types"
 
+	"github.com/unification-com/x-stream/simapp"
 	"github.com/unification-com/x-stream/x/stream/types"
 )
 
@@ -896,4 +897,112 @@ func (s *KeeperTestSuite) TestMsgServerCancelStream_Fail_NotCancellable() {
 	stream, ok := s.app.StreamKeeper.GetStream(s.ctx, s.addrs[1], s.addrs[0], sdk.DefaultBondDenom)
 	s.Require().True(ok)
 	s.Require().Equal(expStream, stream)
+}
+
+// ibcDenomForTest is a real-shape IBC voucher denom ("ibc/" + 64-hex denom-trace hash)
+// used by the denom-agnosticism tests below. IBC vouchers are ordinary bank coins, so a
+// stream can be created, claimed, topped-up, re-rated and cancelled in one exactly like
+// any other denom — there is no native/bond-denom assumption anywhere in the module.
+const ibcDenomForTest = "ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2"
+
+// TestMsgServerStreamLifecycle_IBCDenom proves the module is denom-agnostic end to end
+// for an IBC voucher denom: CreateStream escrows the deposit into the module account,
+// ClaimStream splits the claim into the receiver payment plus the 1% validator fee — all
+// in that same IBC denom — and the escrow drains to zero.
+func (s *KeeperTestSuite) TestMsgServerStreamLifecycle_IBCDenom() {
+	s.Require().NoError(sdk.ValidateDenom(ibcDenomForTest))
+
+	// 1% validator fee so the receiver/fee split is exercised in the IBC denom.
+	s.Require().NoError(s.app.StreamKeeper.SetParams(s.ctx, types.NewParams(mathmod.LegacyNewDecWithPrec(1, 2))))
+
+	// Fresh parties, each funded with the bond denom + an IBC-denom balance.
+	parties := simapp.AddTestAddrsWithExtraNonBondCoin(s.app, s.ctx, 2, mathmod.NewInt(1_000_000), sdk.NewInt64Coin(ibcDenomForTest, 1_000_000))
+	sender, receiver := parties[0], parties[1]
+
+	streamMod := authtypes.NewModuleAddress(types.ModuleName)
+	feeCollector := authtypes.NewModuleAddress(authtypes.FeeCollectorName)
+	bal := func(addr sdk.AccAddress) int64 {
+		return s.app.BankKeeper.GetBalance(s.ctx, addr, ibcDenomForTest).Amount.Int64()
+	}
+
+	senderStart, receiverStart, feeStart := bal(sender), bal(receiver), bal(feeCollector)
+
+	// Create: 1000 ibc deposit at 1/sec → 1000s duration, created 1000s ago so it's fully claimable now.
+	createTime := time.Unix(time.Now().Unix()-1000, 0).UTC()
+	_, err := s.msgServer.CreateStream(s.ctx.WithBlockTime(createTime), &types.MsgCreateStream{
+		Sender:   sender.String(),
+		Receiver: receiver.String(),
+		Deposit:  sdk.NewInt64Coin(ibcDenomForTest, 1000),
+		FlowRate: 1,
+	})
+	s.Require().NoError(err)
+
+	// The IBC deposit is debited from the sender and escrowed in the stream module account.
+	s.Require().Equal(senderStart-1000, bal(sender))
+	s.Require().EqualValues(1000, bal(streamMod))
+
+	// Claim the whole stream 1000s after creation.
+	res, err := s.msgServer.ClaimStream(s.ctx.WithBlockTime(createTime.Add(1000*time.Second)), &types.MsgClaimStream{
+		Sender:   sender.String(),
+		Receiver: receiver.String(),
+		Denom:    ibcDenomForTest,
+	})
+	s.Require().NoError(err)
+
+	// Every response amount is in the IBC denom: 1000 total, 1% fee = 10, payment = 990, nothing left.
+	s.Require().Equal(sdk.NewInt64Coin(ibcDenomForTest, 1000), res.TotalClaimed)
+	s.Require().Equal(sdk.NewInt64Coin(ibcDenomForTest, 990), res.StreamPayment)
+	s.Require().Equal(sdk.NewInt64Coin(ibcDenomForTest, 10), res.ValidatorFee)
+	s.Require().Equal(sdk.NewInt64Coin(ibcDenomForTest, 0), res.RemainingDeposit)
+
+	// Receiver paid + fee routed to the fee collector, both in the IBC denom; escrow fully drained.
+	s.Require().Equal(receiverStart+990, bal(receiver))
+	s.Require().Equal(feeStart+10, bal(feeCollector))
+	s.Require().EqualValues(0, bal(streamMod))
+}
+
+// TestMsgServerCancelStream_IBCDenom proves cancellation pays out what had accrued and
+// refunds the unstreamed remainder of an IBC-denom stream to the sender — again entirely
+// in the IBC denom — then deletes the stream.
+func (s *KeeperTestSuite) TestMsgServerCancelStream_IBCDenom() {
+	s.Require().NoError(s.app.StreamKeeper.SetParams(s.ctx, types.NewParams(mathmod.LegacyNewDecWithPrec(1, 2))))
+
+	parties := simapp.AddTestAddrsWithExtraNonBondCoin(s.app, s.ctx, 2, mathmod.NewInt(1_000_000), sdk.NewInt64Coin(ibcDenomForTest, 1_000_000))
+	sender, receiver := parties[0], parties[1]
+
+	streamMod := authtypes.NewModuleAddress(types.ModuleName)
+	feeCollector := authtypes.NewModuleAddress(authtypes.FeeCollectorName)
+	bal := func(addr sdk.AccAddress) int64 {
+		return s.app.BankKeeper.GetBalance(s.ctx, addr, ibcDenomForTest).Amount.Int64()
+	}
+
+	senderStart, receiverStart, feeStart := bal(sender), bal(receiver), bal(feeCollector)
+
+	// Create: 1000 ibc deposit at 1/sec, created 400s ago → 400 accrued, 600 still escrowed.
+	createTime := time.Unix(time.Now().Unix()-400, 0).UTC()
+	_, err := s.msgServer.CreateStream(s.ctx.WithBlockTime(createTime), &types.MsgCreateStream{
+		Sender:   sender.String(),
+		Receiver: receiver.String(),
+		Deposit:  sdk.NewInt64Coin(ibcDenomForTest, 1000),
+		FlowRate: 1,
+	})
+	s.Require().NoError(err)
+
+	// Cancel now: pays the 400 accrued (1% fee = 4, payment = 396) then refunds the 600 remainder.
+	_, err = s.msgServer.CancelStream(s.ctx.WithBlockTime(createTime.Add(400*time.Second)), &types.MsgCancelStream{
+		Sender:   sender.String(),
+		Receiver: receiver.String(),
+		Denom:    ibcDenomForTest,
+	})
+	s.Require().NoError(err)
+
+	// Sender net: -1000 deposit + 600 refund = -400; receiver +396; fee collector +4 — all IBC denom.
+	s.Require().Equal(senderStart-400, bal(sender))
+	s.Require().Equal(receiverStart+396, bal(receiver))
+	s.Require().Equal(feeStart+4, bal(feeCollector))
+	s.Require().EqualValues(0, bal(streamMod))
+
+	// Stream is deleted after cancellation.
+	_, ok := s.app.StreamKeeper.GetStream(s.ctx, receiver, sender, ibcDenomForTest)
+	s.Require().False(ok)
 }
